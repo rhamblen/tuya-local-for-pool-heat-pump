@@ -1,240 +1,129 @@
 # Pool Heat Pump Tile for Home Assistant
 
-A complete, beginner-installable Home Assistant package for monitoring and
-controlling an **OEM Tuya inverter pool heat pump** (Tuya device category `rs`)
-over the **local network** — no cloud dependency for telemetry.
+Local control and full inverter telemetry for an **OEM Tuya inverter pool heat
+pump** (Tuya category `rs`), plus a clean Home Assistant dashboard tile — all over
+your **own network**, no cloud dependency for the data that matters.
 
-It gives you:
-
-- A full, verified **datapoint (DP) → entity** map for LocalTuya
-- A clean, tile-style **Lovelace dashboard** ("Pool Heat Pump Tile")
-- Step-by-step **installation** for TinyTuya + LocalTuya
-- **Sensor design notes** explaining what the inverter telemetry actually means
-- An **advanced section** with COP / heat-output proxy models and defrost detection
-
-> Treat this as a real industrial inverter monitoring system, not a toy thermostat.
-> The interesting data — compressor frequency, EXV position, discharge temperature,
-> coil temperature — only exists on the LAN protocol.
+It gives you a verified **datapoint → entity** map for LocalTuya, a tile dashboard
+grouped into Thermal / Performance / System, and docs aimed at non-technical
+installers (and at Claude — see [Install](#install)).
 
 ---
 
-## What this project does
+## ⚠️ Requirement: LocalTuya / TinyTuya (not cloud Tuya)
 
-It turns the raw Tuya datapoints exposed by your heat pump's MCU/inverter board
-into named, typed Home Assistant entities, then presents them in a dashboard that
-separates **thermal**, **performance**, and **system status** at a glance.
+Your unit speaks two languages, and only one is useful:
 
-You get real-time control (power, setpoint, mode, silent mode) plus deep inverter
-telemetry that the Tuya cloud integration simply does not surface.
+| Channel | What you get |
+|---|---|
+| **Tuya Cloud** (official HA integration) | Power, setpoint, mode — a thin climate entity |
+| **Tuya LAN v3.3** (LocalTuya / TinyTuya) | **Everything** the MCU reports: compressor frequency & current, EXV, coil/discharge/heat-sink temps, relays, defrost — in real time, on your LAN |
 
----
+The OEM only certified a subset of datapoints for the cloud; the inverter board
+broadcasts the full set locally. So this project uses:
 
-## Why LocalTuya / TinyTuya is required (cloud vs LAN)
-
-Your unit speaks two different "languages":
-
-| Channel | What you get | What you DON'T get |
-|---|---|---|
-| **Tuya Cloud** (official HA Tuya integration) | Power, setpoint, mode, a handful of "official" DPs the vendor chose to publish | Compressor frequency, current, EXV position, coil/discharge/heat-sink temps, relay states, defrost flag — i.e. everything useful for diagnostics |
-| **Tuya LAN v3.3** (LocalTuya / TinyTuya) | **Every** datapoint the MCU reports, in real time, on your own network | — |
-
-The OEM only certified a subset of datapoints for the cloud. The inverter board,
-however, broadcasts the full set locally. **LocalTuya talks directly to the device
-on your LAN**, so it sees all of it — and it keeps working if your internet is down.
-
-- **TinyTuya** is used *once*, up front, to extract your device's **Local Key**,
-  confirm its **IP**, and validate which DPs are live.
-- **LocalTuya** is the permanent Home Assistant integration that maps those DPs to
-  entities and handles live control + telemetry over the LAN.
+- **[TinyTuya](https://github.com/jasonacox/tinytuya)** — once, to extract the
+  device **Local Key**, IP, and validate the DPs.
+- **[LocalTuya (xZetsubou fork)](https://github.com/xZetsubou/hass-localtuya)** —
+  the permanent HA integration that maps DPs to entities over the LAN. *(Use this
+  maintained fork; the original `rospogrigio/localtuya` is stale.)*
 
 ---
 
-## Device access requirements
+## What you get
 
-To enable local communication you need three things:
-
-1. **Device IP** (its address on your LAN — give it a DHCP reservation)
-2. **Device ID** (the Tuya `gwId` / `devId`)
-3. **Local Key** (the per-device LAN encryption key — rotates if you re-pair)
-
-All three are obtained with the **TinyTuya wizard** (see
-[docs/installation.md](docs/installation.md)).
+- Real-time control: power, setpoint, mode, silent mode.
+- Full inverter telemetry mapped to typed HA entities (**25 of 26 DPs**).
+- A tile dashboard separating **Thermal**, **Performance**, and **System status**.
+- A documented, authoritative [datapoint map](docs/datapoints.md) decoded from the
+  device's own Tuya data model — including the fault-code bit labels.
 
 ---
 
-## Quick start
+## Install
 
-1. **Get your Local Key** — install TinyTuya, run the wizard, note the IP / ID / Key.
-   → [docs/installation.md](docs/installation.md#1-tinytuya)
-2. **Install LocalTuya** via HACS in Home Assistant.
-   → [docs/installation.md](docs/installation.md#2-localtuya)
-3. **Add the device** in LocalTuya and **map every DP** from
-   [docs/datapoints.md](docs/datapoints.md).
-4. **Add the dashboard** from
-   [dashboard/pool_heat_pump_tile.yaml](dashboard/pool_heat_pump_tile.yaml)
-   (edit the entity IDs to match yours).
-5. Read the [Sensor Design Notes](#sensor-design-notes) so the numbers mean something.
+### Option A — Let Claude set it up (recommended)
+
+If you use **Claude** (Claude Code, or the Home Assistant MCP), point it at this
+repo and say:
+
+> *"Set up the Tuya pool heat pump from this repo."*
+
+Claude should read **[docs/ai-context.md](docs/ai-context.md)** first, then:
+extract the Local Key with TinyTuya → install LocalTuya → map the DPs from
+[docs/datapoints.md](docs/datapoints.md) → create the helper sensors → deploy the
+dashboard. The AI context file carries the install order and the gotchas
+(scaling, the no-outlet-temp limit, dashboard section framing).
+
+### Option B — Manual
+
+Follow **[docs/installation.md](docs/installation.md)**. In short: install
+TinyTuya and run the wizard for your Local Key → install LocalTuya in HA → add the
+device and map every DP from [docs/datapoints.md](docs/datapoints.md) → paste the
+dashboard from [dashboard/pool_heat_pump_tile.yaml](dashboard/pool_heat_pump_tile.yaml).
 
 ---
 
-## Full datapoint map (summary)
+## Datapoint map
 
 The authoritative, annotated table lives in
-[docs/datapoints.md](docs/datapoints.md). Short version:
+**[docs/datapoints.md](docs/datapoints.md)** — all 26 DPs with translated names,
+types, ranges, the analog input each sensor uses, scaling, and the fault-code
+labels. Highlights:
 
-### Control
-| DP | Entity | Type | Notes |
-|---|---|---|---|
-| 1 | Power | switch | Main on/off |
-| 106 | Set Temperature | number | -22 → 104 °C (range is the raw DP range; clamp to a sane pool range in the UI) |
-| 105 | Mode | select | `smart` / `warm` / `cool` |
-| 117 | Silent Mode | switch | Low-noise / night mode |
-
-### Temperatures
-| DP | Entity | Type |
-|---|---|---|
-| 102 | Water Inlet Temperature | sensor °C |
-| 124 | Ambient Air Temperature (internal unit) | sensor °C |
-| 120 | Evaporator / Coil Temperature | sensor °C |
-| 122 | Compressor Discharge Temperature | sensor °C |
-| 127 | Heat Sink Temperature | sensor °C |
-
-### Inverter / performance
-| DP | Entity | Type | Notes |
-|---|---|---|---|
-| 125 | Compressor Frequency | sensor Hz | Key efficiency signal |
-| 126 | Compressor Current | sensor A | |
-| 104 | Speed Percentage | sensor % | |
-| 128 | EXV Position | sensor | 0–10000; may need `/100` |
-| 129 | DC Fan Speed | sensor | RPM/PWM raw value |
-
-### System state (binary sensors)
-| DP | Entity |
-|---|---|
-| 130 | Defrost Active |
-| 134 | Compressor Relay |
-| 135 | Circulation Pump |
-| 136 | 4-Way Valve |
-| 139 | Charge Relay |
-
-### Fan control
-| DP | Entity | Type |
-|---|---|---|
-| 140 | AC Fan Speed | select: `LowSpeed` / `MidSpeed` / `HighSpeed` |
-
-### Faults
-| DP | Entity | Type |
-|---|---|---|
-| 115 | Fault Group 1 | sensor (bitmap) |
-| 116 | Fault Group 2 | sensor (bitmap) |
-
-### Operating state
-| DP | Entity | Notes |
-|---|---|---|
-| 118 | Actual Operating Mode | `0` = Heating, `1` = Cooling — the **real** state |
-| 103 | Celsius / Fahrenheit toggle | leave on °C |
+- **Control:** DP1 power, DP106 setpoint, DP105 mode, DP117 silent.
+- **Temps:** DP102 inlet water, DP124 ambient air, DP120 air coil, DP122 discharge,
+  DP127 electronics heatsink.
+- **Inverter:** DP125 frequency, DP126 current (**scale 0.1**), DP104 speed %,
+  DP128 EXV, DP129 DC fan.
+- **State:** DP118 actual heat/cool, DP130 defrost, DP134/135/136/139 relays.
 
 ---
 
-## Sensor Design Notes
+## Sensor design notes
 
-**DP 124 is NOT the weather temperature.**
-It is the air temperature measured *at the unit's air intake / internal sensor*.
-On a sunny day next to a wall it can read several degrees above the published
-weather temp; in airflow it drops. Use it for **delta-T against the coil** and
-defrost reasoning — never as your local outdoor temperature. If you want true
-weather temp, use a `weather.*` entity instead.
-
-**DP 118 matters more than DP 105 for diagnostics.**
-DP 105 is the *requested* mode (`smart`/`warm`/`cool`) — what you asked for.
-DP 118 is the *actual* operating mode (`0` heating / `1` cooling) — what the
-machine is really doing right now. In `smart` mode the unit decides for itself,
-so 105 tells you nothing about current behaviour. Always diagnose, automate, and
-alarm on **118**.
-
-**Compressor frequency (DP 125) is the efficiency signal.**
-An inverter heat pump is most efficient at **low, steady frequency**. A unit
-holding 40–60 Hz is sipping power for a given heat output; one pinned at max Hz
-is working hard and its COP is falling. Frequency is your single best proxy for
-"how hard is it trying" and feeds the COP estimate below.
-
-**EXV position (DP 128) is for advanced users.**
-The electronic expansion valve meters refrigerant. Its position (0–10000, often
-`/100` for %) tracks superheat control. Stable EXV = healthy refrigerant cycle;
-hunting/erratic EXV or a pegged valve hints at charge issues, sensor faults, or
-a struggling cycle. Most users can ignore it; refrigeration-literate users will
-want it on the chart.
+- **DP124 ambient is NOT the weather temperature** — it's the air at the unit's
+  intake. Use a `weather.*` entity for real outdoor temp.
+- **DP118 (actual mode) beats DP105 (requested mode)** for diagnostics — in `smart`
+  mode the unit decides for itself.
+- **Compressor frequency (DP125) is the efficiency signal** — low, steady Hz = sipping.
+- **DP127 "RadTemp" is the electronics heatsink, not delivered heat.** See the full
+  temperature explainer in [docs/datapoints.md](docs/datapoints.md#temperature-sensors--what-each-one-actually-is).
 
 ---
 
-## Advanced section
+## Heat output & COP (proxy only)
 
-See the formulas and templates in
-[dashboard/pool_heat_pump_tile.yaml](dashboard/pool_heat_pump_tile.yaml) (commented
-template-sensor block) and the explanation here:
-
-- **COP estimate:** electrical input is the easy half — if you have a smart power
-  meter on the heat-pump circuit (the reference install uses a **Shelly PM**,
-  `sensor.pool_power_power`), use those **measured watts**. Without one, fall back
-  to a current × voltage proxy. The *hard* half is useful heat output (below):
-  without a flow meter that stays an estimate, so treat COP as **relative**
-  ("better than yesterday"), not a billing-grade figure.
-- **Heat-output estimate via delta-T:** `Q ≈ ṁ · c · ΔT`, where ΔT is across the
-  heat exchanger. **This controller exposes only an *inlet* water temp (DP 102) —
-  there is no outlet/return water sensor** (confirmed from the Tuya data model;
-  see [docs/datapoints.md](docs/datapoints.md#heat-output--cop--hardware-limitation)).
-  For a real figure you must add an **outlet water sensor** (e.g. a DS18B20 on the
-  return pipe) **and** a flow rate. Without that, ΔT-against-ambient is a **trend**
-  only, not a watt-meter.
-- **Defrost cycle detection:** trust DP 130 first. As a cross-check, defrost
-  typically shows the 4-way valve (DP 136) flipping, coil temp (DP 120) rising
-  sharply while ambient (DP 124) is low, and the fan (DP 129) dropping.
-
-⚠️ These are **proxy models**. They are useful for spotting trends and faults,
-not for exact thermodynamic accounting.
+Electrical input is exact if you have a power meter on the circuit. Heat **output**
+is not — **this controller exposes only inlet water temp, no outlet/return**. For a
+real figure you must add an outlet sensor (e.g. a DS18B20 on the return pipe) and a
+flow rate; until then COP is a rough trend, not accounting. Details in
+[docs/datapoints.md](docs/datapoints.md#heat-output--cop--hardware-limitation).
 
 ---
 
 ## Troubleshooting
 
-Common issues (full list in [docs/troubleshooting.md](docs/troubleshooting.md)):
-
-- **"Connection refused" / device unreachable** → another app holds the local
-  connection (Tuya/Smart Life app, or the cloud integration). The device allows
-  only one local session. Force-close the phone app.
-- **Local Key stopped working** → it rotates whenever the device is re-paired in
-  the Tuya app. Re-run the TinyTuya wizard.
-- **Entities show `unavailable`** → wrong protocol version (try 3.3 / 3.4),
-  wrong IP after a DHCP change (set a reservation), or wrong DP id/type.
-- **Setpoint won't change** → DP 106 is an integer/number; confirm range and that
-  the unit is powered (DP 1 on) and in a mode that accepts a setpoint.
-
----
-
-## Notes on OEM heat pump behaviour
-
-- Many OEM units **gate the compressor behind a flow switch** — the circulation
-  pump (DP 135) must run and prove flow before the compressor (DP 134) starts.
-- In `smart` mode (DP 105) the controller chooses heat/cool autonomously; expect
-  DP 118 to disagree with what you "set."
-- Compressor **frequency ramps slowly** by design (soft start) — don't read a low
-  Hz right after start as a fault.
-- DP ranges (e.g. DP 106 at -22→104 °C) are the **raw protocol limits**, not the
-  unit's safe operating envelope. Clamp setpoints in the UI to a sane pool range.
+Common issues — single local connection at a time, rotating Local Keys, scaling,
+compressor start sequencing — are covered in
+**[docs/troubleshooting.md](docs/troubleshooting.md)**.
 
 ---
 
 ## Repository layout
 
 ```text
-pool-heat-pump-ha/
- ├── README.md
- ├── dashboard/
- │    └── pool_heat_pump_tile.yaml
- └── docs/
-      ├── datapoints.md
-      ├── installation.md
-      └── troubleshooting.md
+.
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+├── dashboard/
+│   └── pool_heat_pump_tile.yaml
+└── docs/
+    ├── ai-context.md       # instructions for Claude / AI assistants
+    ├── datapoints.md       # authoritative DP map + fault codes + scaling
+    ├── installation.md     # manual TinyTuya → LocalTuya → mapping → dashboard
+    └── troubleshooting.md
 ```
 
 ---
@@ -242,10 +131,14 @@ pool-heat-pump-ha/
 ## Compatibility
 
 - **Home Assistant 2026.x+**
-- **LocalTuya** (HACS) — Tuya LAN protocol **v3.3** (try 3.4 if 3.3 fails)
+- **LocalTuya** (xZetsubou fork, HACS) — Tuya LAN protocol **v3.3** (try 3.4)
 - **TinyTuya** ≥ 1.13 (Python 3.9+)
 
-## License
+## Changelog
 
-MIT — do whatever you like; no warranty. Working on refrigeration equipment and
-mains wiring is at your own risk.
+See [CHANGELOG.md](CHANGELOG.md).
+
+## Licence
+
+[MIT](LICENSE) — no warranty. Working on refrigeration equipment and mains wiring
+is at your own risk.
