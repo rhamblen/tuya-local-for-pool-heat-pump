@@ -61,6 +61,27 @@ Access: `rw` = read/write (controllable), `ro` = read-only (telemetry).
 
 ---
 
+## Temperature sensors — what each one *actually* is
+
+The five temperature DPs are easy to misread (the names don't mean what you'd
+guess). Here's what each one physically measures and how to read it:
+
+| DP | Tuya code | Where it's measured | What it tells you | Watch out for |
+|---|---|---|---|---|
+| **102** | WInTemp (AIN1) | Pool water **entering** the heat pump | Your actual pool water temp — the number you care about | This is **inlet only**; there is **no outlet sensor**, so you can't get water-side ΔT / heat output from the unit (see [COP note](#heat-output--cop--hardware-limitation)) |
+| **124** | AmbTemp (AIN7) | Air at the unit's **intake** | Outdoor air the unit pulls heat *from* | **NOT the weather temperature** — it sits by the unit, reads high in sun / by a wall, and drops in airflow. Use a `weather.*` entity for real outdoor temp |
+| **120** | OutPipeTemp (AIN3) | The outdoor **air-side coil** (evaporator in heating) | The *cold/input* side. In heating it runs **below ambient** (refrigerant absorbing heat from air); a sharp rise while ambient is low signals a defrost | It is **not** "coil that heats the water" — it's the air heat-exchanger, the source side |
+| **122** | ExhaustTemp (AIN5) | Compressor **discharge** (hot refrigerant gas) | How hard the compressor is working; rises with load. Very high discharge can indicate low charge or restricted flow | Refrigerant-side, not water — don't read it as delivered heat |
+| **127** | RadTemp | The **inverter electronics heatsink** | Health of the power board / IPM. Should stay moderate; a climbing value in heat means the electronics cooling is stressed | **Not a "radiator" heating the pool** — it's the circuit-board heatsink. Irrelevant to heat output |
+
+**Rule of thumb for "is it heating well?":** watch **inlet water (102)** rising
+over time, **ambient (124)** as the heat source, and **discharge (122)** /
+**compressor frequency** as the effort. The coil (120) and heatsink (127) are
+diagnostics, not output. None of these give kW of heat delivered — that needs an
+added outlet-water sensor + flow rate.
+
+---
+
 ## Fault codes
 
 Both fault DPs are **bitmaps** — each bit is one error code. The device model
