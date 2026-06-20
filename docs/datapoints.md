@@ -145,16 +145,22 @@ trends, not accounting.
 
 ---
 
-## Recommended additional entities
+## Mapping completeness
 
-Currently unmapped but present in the model and worth adding in LocalTuya:
+**25 of 26 DPs are mapped** in the reference install. The four diagnostics below
+were added after the initial pass:
 
-| DP | Add as | Why |
+| DP | Added as | Why |
 |---|---|---|
-| 118 `WarmOrCool` | `binary_sensor` (or sensor) | The **actual** heat/cool running state — best diagnostic signal |
+| 118 `WarmOrCool` | `sensor` (True/False; `False` = Heating) | The **actual** heat/cool running state — best diagnostic signal. A template helper turns it into "Heating"/"Cooling" text (see below) |
 | 134 `CompRly` | `binary_sensor` | Confirms the compressor contactor is closed (running vs commanded) |
-| 107 `SetDnLimit` / 108 `SetUpLimit` | min/max of the `number` (106) | Bound the setpoint to the unit's real limits instead of guessing |
-| 103 `change_tem` | leave as `switch`, keep **off (°C)** | Locks temperature scaling |
+| 107 `SetDnLimit` / 108 `SetUpLimit` | `sensor` (read 18 / 40 here) | Read once, then set the `number` (106) min/max to match the unit's real limits |
+
+**Only DP 103 (`change_tem`, °C/°F toggle) is intentionally left unmapped** — keep
+the unit on °C so temperature scaling stays consistent.
+
+> Note: a LocalTuya `number`'s min/max is set in the LocalTuya config flow, not via
+> the HA API — so bounding DP106 with the DP107/108 values is a manual edit.
 
 ---
 
@@ -196,12 +202,23 @@ produced.
 | 128 | `sensor.pool_heatpump_exv_position` | Heatpump EXV Position |
 | 129 | `sensor.pool_heatpump_dc_fan_speed` | Heatpump DC Fan Speed |
 | 130 | `binary_sensor.pool_heatpump_defrost` | Heatpump Defrost |
+| 134 | `binary_sensor.pool_heatpump_compressor_relay` | Compressor Contactor Relay |
 | 135 | `binary_sensor.pool_heatpump_water_pump` | Heatpump Water Pump |
 | 136 | `binary_sensor.pool_heatpump_4_way_valve` | Heatpump 4-way Valve |
 | 139 | `binary_sensor.pool_heatpump_charge_relay` | Heatpump Charge Relay |
 | 140 | `select.pool_heatpump_ac_fan_speed` | Heatpump AC Fan Speed |
+| 118 | `sensor.pool_heatpump_actual_operating_mode` | Actual Operating Mode (False = Heating) |
+| 107 | `sensor.pool_heatpump_setpoint_lower_limit` | Setpoint lower limit |
+| 108 | `sensor.pool_heatpump_setpoint_upper_limit` | Setpoint upper limit |
 | 115 | `sensor.pool_error_code1` | Heatpump Fault Group 1 |
 | 116 | `sensor.pool_error_code2` | Heatpump Fault Group 2 |
+
+**Derived template helpers (this install):**
+
+| Helper entity | Purpose |
+|---|---|
+| `sensor.pool_heat_pump_power` | `max(0, pool_power_power − 252 − 26·lights)` — measured heat-pump-only watts |
+| `sensor.pool_heat_pump_mode` | Maps DP118 to **Heating / Cooling** text for the dashboard |
 
 **Measured electrical input (not a Tuya DP):** this install has a **Shelly power
 meter** on the circuit (`sensor.pool_power_power` W, `sensor.pool_power_energy`
