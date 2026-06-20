@@ -1,0 +1,230 @@
+# ============================================================================
+# Pool Heat Pump Tile  —  Home Assistant Lovelace dashboard card
+# ----------------------------------------------------------------------------
+# Uses ONLY core HA cards (vertical-stack / grid / tile / heading) so no extra
+# HACS frontend resources are required. Compatible with Home Assistant 2026+.
+#
+# HOW TO USE
+#   - Paste this whole block as a "Manual" card, OR drop it into the Raw
+#     configuration editor under a view's `cards:` list.
+#   - Entity ids assume the LocalTuya device slug is `pool_heat_pump`.
+#     If yours differs, find/replace `pool_heat_pump` throughout.
+#   - The optional `template:` sensors at the bottom (COP proxy, heat-output
+#     proxy, defrost, fault rollup) go in configuration.yaml, NOT here.
+# ============================================================================
+
+type: vertical-stack
+cards:
+  # ----- Title + headline control -----------------------------------------
+  - type: heading
+    heading: Pool Heat Pump
+    heading_style: title
+    icon: mdi:hot-tub
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: switch.pool_heat_pump_power
+        name: Power
+        icon: mdi:power
+        color: green
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: select.pool_heat_pump_mode
+        name: Mode
+        icon: mdi:tune-variant
+        # tap opens the more-info dialog to pick smart / warm / cool
+
+  # ===== THERMAL ===========================================================
+  - type: heading
+    heading: Thermal
+    heading_style: subtitle
+    icon: mdi:thermometer-water
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.pool_heat_pump_water_inlet_temp
+        name: Water In
+        icon: mdi:pool-thermometer
+        color: blue
+      - type: tile
+        entity: number.pool_heat_pump_set_temperature
+        name: Set Temp
+        icon: mdi:thermometer-chevron-up
+        features_position: bottom
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: sensor.pool_heat_pump_ambient_air_temp
+        name: Air (unit)
+        icon: mdi:weather-windy
+      - type: tile
+        entity: sensor.pool_heat_pump_coil_temp
+        name: Coil
+        icon: mdi:snowflake-thermometer
+      - type: tile
+        entity: sensor.pool_heat_pump_discharge_temp
+        name: Discharge
+        icon: mdi:thermometer-high
+        color: red
+      - type: tile
+        entity: sensor.pool_heat_pump_heat_sink_temp
+        name: Heat Sink
+        icon: mdi:radiator
+
+  # ===== PERFORMANCE (inverter) ===========================================
+  - type: heading
+    heading: Performance
+    heading_style: subtitle
+    icon: mdi:speedometer
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.pool_heat_pump_compressor_frequency
+        name: Compressor
+        icon: mdi:sine-wave
+        color: amber
+      - type: tile
+        entity: sensor.pool_heat_pump_compressor_current
+        name: Current
+        icon: mdi:current-ac
+      - type: tile
+        entity: sensor.pool_heat_pump_speed_percent
+        name: Speed
+        icon: mdi:gauge
+      - type: tile
+        entity: sensor.pool_heat_pump_dc_fan_speed
+        name: DC Fan
+        icon: mdi:fan
+      - type: tile
+        entity: select.pool_heat_pump_ac_fan_speed
+        name: AC Fan
+        icon: mdi:fan-speed-3
+      - type: tile
+        entity: sensor.pool_heat_pump_exv_position
+        name: EXV Pos
+        icon: mdi:valve
+
+  # Trend graph: compressor frequency is the key efficiency signal
+  - type: history-graph
+    title: Compressor frequency (24h)
+    hours_to_show: 24
+    entities:
+      - entity: sensor.pool_heat_pump_compressor_frequency
+        name: Frequency (Hz)
+      - entity: sensor.pool_heat_pump_water_inlet_temp
+        name: Water In (°C)
+
+  # ===== SYSTEM STATUS =====================================================
+  - type: heading
+    heading: System Status
+    heading_style: subtitle
+    icon: mdi:state-machine
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.pool_heat_pump_actual_mode
+        name: Actual Mode
+        icon: mdi:swap-horizontal-bold
+        # 0 = Heating, 1 = Cooling  (the REAL running mode — trust this)
+      - type: tile
+        entity: binary_sensor.pool_heat_pump_defrost
+        name: Defrost
+        icon: mdi:snowflake-melt
+        color: cyan
+      - type: tile
+        entity: binary_sensor.pool_heat_pump_circulation_pump
+        name: Pump
+        icon: mdi:pump
+        color: blue
+      - type: tile
+        entity: binary_sensor.pool_heat_pump_compressor_relay
+        name: Comp. Relay
+        icon: mdi:electric-switch
+      - type: tile
+        entity: binary_sensor.pool_heat_pump_4way_valve
+        name: 4-Way Valve
+        icon: mdi:valve-open
+      - type: tile
+        entity: binary_sensor.pool_heat_pump_charge_relay
+        name: Charge Relay
+        icon: mdi:flash
+      - type: tile
+        entity: switch.pool_heat_pump_silent_mode
+        name: Silent
+        icon: mdi:volume-mute
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: sensor.pool_heat_pump_fault_group_1
+        name: Faults
+        icon: mdi:alert-circle
+        color: red
+
+# ============================================================================
+# OPTIONAL — advanced template sensors (PROXY models, not metered values).
+# Put this in configuration.yaml (or a !include'd package) and restart HA.
+# Then add tiles for sensor.pool_heat_pump_cop_estimate etc. to the dashboard.
+# ============================================================================
+#
+# template:
+#   - sensor:
+#       # --- Actual mode as text -------------------------------------------
+#       - name: Pool Heat Pump Actual Mode Text
+#         state: >
+#           {% set m = states('sensor.pool_heat_pump_actual_mode') %}
+#           {{ 'Heating' if m == '0' else 'Cooling' if m == '1' else 'Unknown' }}
+#
+#       # --- Heat-output proxy (Q ~ m_dot * c * dT) ------------------------
+#       # ASSUMED flow rate; dT approximated from inlet vs unit-air. This is a
+#       # TREND indicator, not a calibrated kW reading.
+#       - name: Pool Heat Pump Heat Output Estimate
+#         unit_of_measurement: kW
+#         state: >
+#           {% set flow_lpm = 80 %}            {# assumed pump flow, L/min #}
+#           {% set inlet = states('sensor.pool_heat_pump_water_inlet_temp') | float(0) %}
+#           {% set air   = states('sensor.pool_heat_pump_ambient_air_temp') | float(0) %}
+#           {% set dT = (inlet - air) | abs %}
+#           {# Q(kW) = flow(kg/s) * 4.186 kJ/kgK * dT #}
+#           {{ ((flow_lpm / 60.0) * 4.186 * dT) | round(2) }}
+#
+#       # --- COP proxy ------------------------------------------------------
+#       # Relative-only: useful heat (above) vs an electrical-input model from
+#       # compressor current. Treat as "better/worse than yesterday", not exact.
+#       - name: Pool Heat Pump COP Estimate
+#         state: >
+#           {% set volts = 230 %}
+#           {% set amps = states('sensor.pool_heat_pump_compressor_current') | float(0) %}
+#           {% set elec_kw = (volts * amps) / 1000.0 %}
+#           {% set heat_kw = states('sensor.pool_heat_pump_heat_output_estimate') | float(0) %}
+#           {{ (heat_kw / elec_kw) | round(2) if elec_kw > 0.1 else 'unavailable' }}
+#
+#   - binary_sensor:
+#       # --- Any fault present ---------------------------------------------
+#       - name: Pool Heat Pump Fault
+#         device_class: problem
+#         state: >
+#           {{ (states('sensor.pool_heat_pump_fault_group_1') | int(0)) > 0
+#              or (states('sensor.pool_heat_pump_fault_group_2') | int(0)) > 0 }}
+#
+#       # --- Defrost cross-check (in case DP 130 is unreliable) ------------
+#       # Coil rising while ambient cold + 4-way valve flipped = likely defrost.
+#       - name: Pool Heat Pump Defrost Inferred
+#         device_class: running
+#         state: >
+#           {{ is_state('binary_sensor.pool_heat_pump_defrost','on')
+#              or (is_state('binary_sensor.pool_heat_pump_4way_valve','on')
+#                  and (states('sensor.pool_heat_pump_ambient_air_temp')|float(99)) < 7) }}
