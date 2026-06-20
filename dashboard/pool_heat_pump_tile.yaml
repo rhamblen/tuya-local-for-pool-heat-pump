@@ -129,13 +129,12 @@ cards:
         name: Energy
         icon: mdi:counter
 
-  # Water temp on its own axis with a fixed 10 °C floor (so small swings aren't
-  # exaggerated, and it isn't dwarfed by the power trace's scale).
-  # fit_y_data lets the top extend with the data while keeping the 10 °C floor.
+  # Water temp on its own axis (floor 0) so it isn't dwarfed by the power trace.
+  # fit_y_data lets the top extend with the data.
   - type: history-graph
     title: Water temperature (24h)
     hours_to_show: 24
-    min_y_axis: 10
+    min_y_axis: 0
     fit_y_data: true
     entities:
       - entity: sensor.pool_current_temperature
