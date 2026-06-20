@@ -129,17 +129,28 @@ cards:
         name: Energy
         icon: mdi:counter
 
-  # Trend graph: compressor frequency + water temp + measured power
+  # Water temp on its own axis with a fixed 10 °C floor (so small swings aren't
+  # exaggerated, and it isn't dwarfed by the power trace's scale).
+  # fit_y_data lets the top extend with the data while keeping the 10 °C floor.
   - type: history-graph
-    title: Compressor frequency & power (24h)
+    title: Water temperature (24h)
     hours_to_show: 24
+    min_y_axis: 10
+    fit_y_data: true
+    entities:
+      - entity: sensor.pool_current_temperature
+        name: Water In (°C)
+
+  # Performance trace: compressor effort + derived heat-pump watts
+  - type: history-graph
+    title: Compressor & power (24h)
+    hours_to_show: 24
+    min_y_axis: 0
     entities:
       - entity: sensor.pool_heatpump_compressor_frequency
         name: Frequency (Hz)
-      - entity: sensor.pool_current_temperature
-        name: Water In (°C)
-      - entity: sensor.pool_power_power
-        name: Power (W)
+      - entity: sensor.pool_heat_pump_power
+        name: HP power (W)
 
   # ===== SYSTEM STATUS =====================================================
   - type: heading
