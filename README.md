@@ -173,11 +173,12 @@ See the formulas and templates in
 [dashboard/pool_heat_pump_tile.yaml](dashboard/pool_heat_pump_tile.yaml) (commented
 template-sensor block) and the explanation here:
 
-- **COP estimate (proxy, not metered):** without a flow meter and a power meter
-  you cannot measure true COP. As a *trend* proxy you can relate useful heat
-  (from water delta-T × assumed flow) to electrical input (≈ current × voltage,
-  or a frequency-based input model). Treat the number as **relative**, good for
-  "is it better than yesterday," not for billing.
+- **COP estimate:** electrical input is the easy half — if you have a smart power
+  meter on the heat-pump circuit (the reference install uses a **Shelly PM**,
+  `sensor.pool_power_power`), use those **measured watts**. Without one, fall back
+  to a current × voltage proxy. The *hard* half is useful heat output (below):
+  without a flow meter that stays an estimate, so treat COP as **relative**
+  ("better than yesterday"), not a billing-grade figure.
 - **Heat-output estimate via delta-T:** `Q ≈ ṁ · c · ΔT`, where ΔT is across the
   heat exchanger. With only an inlet sensor (DP 102) you approximate ΔT against
   ambient/coil and a fixed assumed flow rate — again a **trend**, not a watt-meter.

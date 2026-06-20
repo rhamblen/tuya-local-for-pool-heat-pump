@@ -4,13 +4,17 @@
 # Uses ONLY core HA cards (vertical-stack / grid / tile / heading) so no extra
 # HACS frontend resources are required. Compatible with Home Assistant 2026+.
 #
-# HOW TO USE
-#   - Paste this whole block as a "Manual" card, OR drop it into the Raw
-#     configuration editor under a view's `cards:` list.
-#   - Entity ids assume the LocalTuya device slug is `pool_heat_pump`.
-#     If yours differs, find/replace `pool_heat_pump` throughout.
-#   - The optional `template:` sensors at the bottom (COP proxy, heat-output
-#     proxy, defrost, fault rollup) go in configuration.yaml, NOT here.
+# ENTITY IDS BELOW ARE FROM A REAL LOCALTUYA INSTALL (see docs/datapoints.md,
+# "Reference: a real deployment"). If your LocalTuya entities are named
+# differently, find/replace to match — every id here exists and reports live.
+#
+# NOTE: this deployment also has a Shelly power meter on the heat-pump circuit
+# (sensor.pool_power_power / sensor.pool_power_energy), so the optional COP
+# block at the bottom uses MEASURED watts instead of a current×voltage proxy.
+#
+# DPs 134 (compressor relay), 118 (actual operating mode) and 103 (°C/°F) are
+# not currently mapped in this LocalTuya config, so they are omitted here.
+# Add them in LocalTuya to light up the commented tiles. DP 118 is recommended.
 # ============================================================================
 
 type: vertical-stack
@@ -26,14 +30,14 @@ cards:
     square: false
     cards:
       - type: tile
-        entity: switch.pool_heat_pump_power
+        entity: switch.pool_power_switch
         name: Power
         icon: mdi:power
         color: green
         tap_action:
           action: toggle
       - type: tile
-        entity: select.pool_heat_pump_mode
+        entity: select.pool_set_mode
         name: Mode
         icon: mdi:tune-variant
         # tap opens the more-info dialog to pick smart / warm / cool
@@ -49,12 +53,12 @@ cards:
     square: false
     cards:
       - type: tile
-        entity: sensor.pool_heat_pump_water_inlet_temp
+        entity: sensor.pool_current_temperature
         name: Water In
         icon: mdi:pool-thermometer
         color: blue
       - type: tile
-        entity: number.pool_heat_pump_set_temperature
+        entity: number.pool_target_temperature
         name: Set Temp
         icon: mdi:thermometer-chevron-up
         features_position: bottom
@@ -62,20 +66,20 @@ cards:
           - type: numeric-input
             style: buttons
       - type: tile
-        entity: sensor.pool_heat_pump_ambient_air_temp
+        entity: sensor.pool_ambient_temperature
         name: Air (unit)
         icon: mdi:weather-windy
       - type: tile
-        entity: sensor.pool_heat_pump_coil_temp
+        entity: sensor.pool_heatpump_coil_pipe_temp
         name: Coil
         icon: mdi:snowflake-thermometer
       - type: tile
-        entity: sensor.pool_heat_pump_discharge_temp
+        entity: sensor.pool_exhaust_temperature
         name: Discharge
         icon: mdi:thermometer-high
         color: red
       - type: tile
-        entity: sensor.pool_heat_pump_heat_sink_temp
+        entity: sensor.pool_radiator_temperature
         name: Heat Sink
         icon: mdi:radiator
 
@@ -90,40 +94,52 @@ cards:
     square: false
     cards:
       - type: tile
-        entity: sensor.pool_heat_pump_compressor_frequency
+        entity: sensor.pool_heatpump_compressor_frequency
         name: Compressor
         icon: mdi:sine-wave
         color: amber
       - type: tile
-        entity: sensor.pool_heat_pump_compressor_current
+        entity: sensor.pool_heatpump_compressor_current
         name: Current
         icon: mdi:current-ac
       - type: tile
-        entity: sensor.pool_heat_pump_speed_percent
+        entity: sensor.pool_compressor_speed
         name: Speed
         icon: mdi:gauge
       - type: tile
-        entity: sensor.pool_heat_pump_dc_fan_speed
+        entity: sensor.pool_heatpump_dc_fan_speed
         name: DC Fan
         icon: mdi:fan
       - type: tile
-        entity: select.pool_heat_pump_ac_fan_speed
+        entity: select.pool_heatpump_ac_fan_speed
         name: AC Fan
         icon: mdi:fan-speed-3
       - type: tile
-        entity: sensor.pool_heat_pump_exv_position
+        entity: sensor.pool_heatpump_exv_position
         name: EXV Pos
         icon: mdi:valve
+      # --- measured electrical input (Shelly PM on the heat-pump circuit) ---
+      - type: tile
+        entity: sensor.pool_power_power
+        name: Power Draw
+        icon: mdi:flash
+        color: orange
+      - type: tile
+        entity: sensor.pool_power_energy
+        name: Energy
+        icon: mdi:counter
 
-  # Trend graph: compressor frequency is the key efficiency signal
+  # Trend graph: compressor frequency + water temp + measured power
   - type: history-graph
-    title: Compressor frequency (24h)
+    title: Compressor frequency & power (24h)
     hours_to_show: 24
     entities:
-      - entity: sensor.pool_heat_pump_compressor_frequency
+      - entity: sensor.pool_heatpump_compressor_frequency
         name: Frequency (Hz)
-      - entity: sensor.pool_heat_pump_water_inlet_temp
+      - entity: sensor.pool_current_temperature
         name: Water In (°C)
+      - entity: sensor.pool_power_power
+        name: Power (W)
 
   # ===== SYSTEM STATUS =====================================================
   - type: heading
@@ -136,95 +152,84 @@ cards:
     square: false
     cards:
       - type: tile
-        entity: sensor.pool_heat_pump_actual_mode
-        name: Actual Mode
-        icon: mdi:swap-horizontal-bold
-        # 0 = Heating, 1 = Cooling  (the REAL running mode — trust this)
-      - type: tile
-        entity: binary_sensor.pool_heat_pump_defrost
+        entity: binary_sensor.pool_heatpump_defrost
         name: Defrost
         icon: mdi:snowflake-melt
         color: cyan
       - type: tile
-        entity: binary_sensor.pool_heat_pump_circulation_pump
+        entity: binary_sensor.pool_heatpump_water_pump
         name: Pump
         icon: mdi:pump
         color: blue
       - type: tile
-        entity: binary_sensor.pool_heat_pump_compressor_relay
-        name: Comp. Relay
-        icon: mdi:electric-switch
-      - type: tile
-        entity: binary_sensor.pool_heat_pump_4way_valve
+        entity: binary_sensor.pool_heatpump_4_way_valve
         name: 4-Way Valve
         icon: mdi:valve-open
       - type: tile
-        entity: binary_sensor.pool_heat_pump_charge_relay
+        entity: binary_sensor.pool_heatpump_charge_relay
         name: Charge Relay
         icon: mdi:flash
       - type: tile
-        entity: switch.pool_heat_pump_silent_mode
+        entity: switch.pool_silent_mode
         name: Silent
         icon: mdi:volume-mute
         tap_action:
           action: toggle
       - type: tile
-        entity: sensor.pool_heat_pump_fault_group_1
+        entity: sensor.pool_error_code1
         name: Faults
         icon: mdi:alert-circle
         color: red
+      # --- not mapped in LocalTuya yet (add DP 134 / DP 118 to enable) ------
+      # - type: tile
+      #   entity: sensor.pool_actual_mode        # DP 118 (0=Heating, 1=Cooling)
+      #   name: Actual Mode
+      #   icon: mdi:swap-horizontal-bold
+      # - type: tile
+      #   entity: binary_sensor.pool_compressor_relay   # DP 134
+      #   name: Comp. Relay
+      #   icon: mdi:electric-switch
 
 # ============================================================================
-# OPTIONAL — advanced template sensors (PROXY models, not metered values).
-# Put this in configuration.yaml (or a !include'd package) and restart HA.
-# Then add tiles for sensor.pool_heat_pump_cop_estimate etc. to the dashboard.
+# OPTIONAL — advanced template sensors. Put in configuration.yaml, restart HA,
+# then add tiles for the resulting entities. PROXY models — see README caveats.
+#
+# This install has a real power meter, so COP uses MEASURED watts. Heat output
+# is still a proxy (no flow meter): tune `flow_lpm` to your pump's real flow.
 # ============================================================================
 #
 # template:
 #   - sensor:
-#       # --- Actual mode as text -------------------------------------------
-#       - name: Pool Heat Pump Actual Mode Text
-#         state: >
-#           {% set m = states('sensor.pool_heat_pump_actual_mode') %}
-#           {{ 'Heating' if m == '0' else 'Cooling' if m == '1' else 'Unknown' }}
-#
 #       # --- Heat-output proxy (Q ~ m_dot * c * dT) ------------------------
-#       # ASSUMED flow rate; dT approximated from inlet vs unit-air. This is a
-#       # TREND indicator, not a calibrated kW reading.
 #       - name: Pool Heat Pump Heat Output Estimate
 #         unit_of_measurement: kW
+#         device_class: power
 #         state: >
-#           {% set flow_lpm = 80 %}            {# assumed pump flow, L/min #}
-#           {% set inlet = states('sensor.pool_heat_pump_water_inlet_temp') | float(0) %}
-#           {% set air   = states('sensor.pool_heat_pump_ambient_air_temp') | float(0) %}
+#           {% set flow_lpm = 80 %}            {# assumed pump flow, L/min — TUNE #}
+#           {% set inlet = states('sensor.pool_current_temperature') | float(0) %}
+#           {% set air   = states('sensor.pool_ambient_temperature') | float(0) %}
 #           {% set dT = (inlet - air) | abs %}
-#           {# Q(kW) = flow(kg/s) * 4.186 kJ/kgK * dT #}
 #           {{ ((flow_lpm / 60.0) * 4.186 * dT) | round(2) }}
 #
-#       # --- COP proxy ------------------------------------------------------
-#       # Relative-only: useful heat (above) vs an electrical-input model from
-#       # compressor current. Treat as "better/worse than yesterday", not exact.
+#       # --- COP estimate using MEASURED electrical input ------------------
 #       - name: Pool Heat Pump COP Estimate
 #         state: >
-#           {% set volts = 230 %}
-#           {% set amps = states('sensor.pool_heat_pump_compressor_current') | float(0) %}
-#           {% set elec_kw = (volts * amps) / 1000.0 %}
+#           {% set elec_w = states('sensor.pool_power_power') | float(0) %}
 #           {% set heat_kw = states('sensor.pool_heat_pump_heat_output_estimate') | float(0) %}
-#           {{ (heat_kw / elec_kw) | round(2) if elec_kw > 0.1 else 'unavailable' }}
+#           {{ (heat_kw / (elec_w / 1000.0)) | round(2) if elec_w > 100 else 'unavailable' }}
 #
 #   - binary_sensor:
 #       # --- Any fault present ---------------------------------------------
 #       - name: Pool Heat Pump Fault
 #         device_class: problem
 #         state: >
-#           {{ (states('sensor.pool_heat_pump_fault_group_1') | int(0)) > 0
-#              or (states('sensor.pool_heat_pump_fault_group_2') | int(0)) > 0 }}
+#           {{ (states('sensor.pool_error_code1') | int(0)) > 0
+#              or (states('sensor.pool_error_code2') | int(0)) > 0 }}
 #
-#       # --- Defrost cross-check (in case DP 130 is unreliable) ------------
-#       # Coil rising while ambient cold + 4-way valve flipped = likely defrost.
+#       # --- Defrost cross-check -------------------------------------------
 #       - name: Pool Heat Pump Defrost Inferred
 #         device_class: running
 #         state: >
-#           {{ is_state('binary_sensor.pool_heat_pump_defrost','on')
-#              or (is_state('binary_sensor.pool_heat_pump_4way_valve','on')
-#                  and (states('sensor.pool_heat_pump_ambient_air_temp')|float(99)) < 7) }}
+#           {{ is_state('binary_sensor.pool_heatpump_defrost','on')
+#              or (is_state('binary_sensor.pool_heatpump_4_way_valve','on')
+#                  and (states('sensor.pool_ambient_temperature')|float(99)) < 7) }}
