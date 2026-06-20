@@ -180,8 +180,12 @@ template-sensor block) and the explanation here:
   without a flow meter that stays an estimate, so treat COP as **relative**
   ("better than yesterday"), not a billing-grade figure.
 - **Heat-output estimate via delta-T:** `Q ≈ ṁ · c · ΔT`, where ΔT is across the
-  heat exchanger. With only an inlet sensor (DP 102) you approximate ΔT against
-  ambient/coil and a fixed assumed flow rate — again a **trend**, not a watt-meter.
+  heat exchanger. **This controller exposes only an *inlet* water temp (DP 102) —
+  there is no outlet/return water sensor** (confirmed from the Tuya data model;
+  see [docs/datapoints.md](docs/datapoints.md#heat-output--cop--hardware-limitation)).
+  For a real figure you must add an **outlet water sensor** (e.g. a DS18B20 on the
+  return pipe) **and** a flow rate. Without that, ΔT-against-ambient is a **trend**
+  only, not a watt-meter.
 - **Defrost cycle detection:** trust DP 130 first. As a cross-check, defrost
   typically shows the 4-way valve (DP 136) flipping, coil temp (DP 120) rising
   sharply while ambient (DP 124) is low, and the fan (DP 129) dropping.

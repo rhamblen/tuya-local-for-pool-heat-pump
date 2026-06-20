@@ -1,126 +1,139 @@
 # Datapoint (DP) Map
 
-This is the authoritative DP → Home Assistant entity mapping for the OEM Tuya
-inverter pool heat pump (Tuya category `rs`, LAN protocol v3.3).
+Authoritative DP map for the OEM Tuya inverter pool heat pump
+(Tuya category `rs`, LAN protocol v3.3). The table below is decoded directly
+from the device's own Tuya data model (`modelId 00000018tk`, dumped via the
+Tuya IoT `device/{id}/model` API), with the original Chinese names translated —
+so it reflects what the MCU *actually* exposes, including DPs not yet turned
+into Home Assistant entities.
 
 When adding the device in LocalTuya, create one entity per row using the
 **Platform**, **DP id**, and the suggested **entity id**. Suggested entity ids
-assume the device is named `pool_heat_pump` — rename to match yours and update
-the dashboard accordingly.
-
-> **Scaling note:** LocalTuya can apply a scaling factor per entity. Where a
-> column says "scale", set it in the entity options. Tuya often transmits
-> temperatures and currents ×10 (e.g. `285` = `28.5`). **Validate against the
-> unit's own display** before trusting a scale — OEM firmware varies.
+assume the device is named `pool_heat_pump` — rename to match yours.
 
 ---
 
-## Control
+## Authoritative DP table
 
-| DP | Name | Platform | Suggested entity_id | Range / values | Notes |
-|---|---|---|---|---|---|
-| 1 | Power | `switch` | `switch.pool_heat_pump_power` | on/off | Master power |
-| 106 | Set Temperature | `number` | `number.pool_heat_pump_set_temperature` | -22 → 104 °C (raw) | Clamp to a pool range (e.g. 18–40 °C) in the UI. Possible ×10 scale |
-| 105 | Mode | `select` | `select.pool_heat_pump_mode` | `smart` / `warm` / `cool` | Requested mode (see DP 118 for actual) |
-| 117 | Silent Mode | `switch` | `switch.pool_heat_pump_silent_mode` | on/off | Night / low-noise |
+Access: `rw` = read/write (controllable), `ro` = read-only (telemetry).
+`AIN` = which analog input the sensor is wired to on the controller.
 
----
+| DP | Tuya code | Meaning (EN) | Type / range | Access | AIN | Notes |
+|---|---|---|---|---|---|---|
+| 1 | Power | Power on/off | bool | rw | — | Master power |
+| 102 | WInTemp | **Inlet** water temp | value -22…250 | ro | AIN1 | °C (or °F per DP103). **No scaling** (scale 0) |
+| 103 | change_tem | °C/°F toggle (0=°C, 1=°F) | bool | rw | — | Keep 0 (°C) |
+| 104 | SpeedPercentage | Compressor speed % | value 0…150 | ro | — | % |
+| 105 | SetMode | Mode (0 smart / 1 warm / 2 cool) | enum `smart`/`warm`/`cool` | rw | — | Requested mode |
+| 106 | SetTemp | Set temperature | value -22…104 | rw | — | Clamp to a sane pool range |
+| 107 | SetDnLimit | Setpoint **lower** limit | value -22…104 | ro | — | Use to bound the `number` entity |
+| 108 | SetUpLimit | Setpoint **upper** limit | value -22…104 | ro | — | Use to bound the `number` entity |
+| 115 | fault1 | Fault group 1 (bitmap) | bitmap, 30 bits | ro | — | See [Fault codes](#fault-codes) |
+| 116 | fault2 | Fault group 2 (bitmap) | bitmap, 4 bits | ro | — | See [Fault codes](#fault-codes) |
+| 117 | SilentMode | Silent / night mode | bool | rw | — | |
+| 118 | WarmOrCool | **Actual running mode** (heat/cool) | bool | ro | — | The real state — better than DP105 for diagnostics |
+| 120 | OutPipeTemp | **Outdoor air-coil** temp | value -22…250 | ro | AIN3 | The *cold/input* side in heating. No scaling |
+| 122 | ExhaustTemp | Compressor **discharge** temp | value -22…250 | ro | AIN5 | Hot gas. No scaling |
+| 124 | AmbTemp | Outdoor **ambient air** temp | value -22…250 | ro | AIN7 | NOT weather temp. No scaling |
+| 125 | CompFreAct | Compressor frequency | value 0…150 | ro | — | Hz. Key efficiency signal |
+| 126 | CompressorCurrent | Compressor current | value 0…100 | ro | — | **Scale ×0.1 → A** (raw 50 = 5.0 A) |
+| 127 | RadTemp | Electronics **heatsink** temp | value -22…250 | ro | — | Inverter/IPM board — NOT water heat |
+| 128 | EXVPosition | EXV opening | value 0…10000 | ro | — | `/100` for % if desired |
+| 129 | DCFanSpeed | DC fan speed | value 0…10000 | ro | — | RPM/PWM |
+| 130 | Defrost | Defrost active | bool | ro | — | |
+| 134 | CompRly | Compressor contactor relay (OUT1) | bool | ro | — | Compressor actually energised |
+| 135 | CyclePump | Circulation water pump relay (OUT2) | bool | ro | — | The pump the controller calls for |
+| 136 | ReserveValve | 4-way reversing valve | bool | ro | — | Heat/cool/defrost |
+| 139 | ChargeRly | Current-limiting charge relay | bool | ro | — | DC-bus pre-charge |
+| 140 | ACFanSpeed | AC fan speed | enum STOP/`LowSpeed`/`MidSpeed`/`HighSpeed` | ro | — | |
 
-## Temperature sensors
+### Scaling — verified
 
-| DP | Name | Platform | Suggested entity_id | Unit | Notes |
-|---|---|---|---|---|---|
-| 102 | Water Inlet Temperature | `sensor` | `sensor.pool_heat_pump_water_inlet_temp` | °C | Primary water temp. Possible ×10 scale |
-| 124 | Ambient Air Temperature | `sensor` | `sensor.pool_heat_pump_ambient_air_temp` | °C | **Internal unit air sensor — NOT weather temp** |
-| 120 | Evaporator / Coil Temperature | `sensor` | `sensor.pool_heat_pump_coil_temp` | °C | Drives defrost logic |
-| 122 | Compressor Discharge Temperature | `sensor` | `sensor.pool_heat_pump_discharge_temp` | °C | High value = hard work / possible low charge |
-| 127 | Heat Sink Temperature | `sensor` | `sensor.pool_heat_pump_heat_sink_temp` | °C | Inverter/IPM board temperature |
-
-Set `device_class: temperature` and `state_class: measurement` on these for nice
-history graphs.
-
----
-
-## Inverter / performance sensors
-
-| DP | Name | Platform | Suggested entity_id | Unit | Notes |
-|---|---|---|---|---|---|
-| 125 | Compressor Frequency | `sensor` | `sensor.pool_heat_pump_compressor_frequency` | Hz | Key efficiency signal |
-| 126 | Compressor Current | `sensor` | `sensor.pool_heat_pump_compressor_current` | A | Possible ×10 scale; `device_class: current` |
-| 104 | Speed Percentage | `sensor` | `sensor.pool_heat_pump_speed_percent` | % | |
-| 128 | EXV Position | `sensor` | `sensor.pool_heat_pump_exv_position` | steps / % | 0–10000; apply `/100` if you want % |
-| 129 | DC Fan Speed | `sensor` | `sensor.pool_heat_pump_dc_fan_speed` | RPM / PWM | Raw value; meaning is firmware-specific |
-
----
-
-## System state (binary sensors)
-
-Map these as `binary_sensor`. Choose a sensible `device_class` (e.g. `running`,
-`power`, `opening`) per the table.
-
-| DP | Name | Platform | Suggested entity_id | device_class | Notes |
-|---|---|---|---|---|---|
-| 130 | Defrost Active | `binary_sensor` | `binary_sensor.pool_heat_pump_defrost` | `running` | True during a defrost cycle |
-| 134 | Compressor Relay | `binary_sensor` | `binary_sensor.pool_heat_pump_compressor_relay` | `running` | Compressor energised |
-| 135 | Circulation Pump | `binary_sensor` | `binary_sensor.pool_heat_pump_circulation_pump` | `running` | Water pump |
-| 136 | 4-Way Valve | `binary_sensor` | `binary_sensor.pool_heat_pump_4way_valve` | `opening` | Reversing valve (heat/cool/defrost) |
-| 139 | Charge Relay | `binary_sensor` | `binary_sensor.pool_heat_pump_charge_relay` | `power` | Inverter DC-bus charge relay |
+- **Temperatures (102, 120, 122, 124, 127): no scaling.** The model declares
+  `scale 0` and the live values read sensibly (water 30, ambient 22, discharge
+  35). Leave the LocalTuya scaling factor at **1**.
+- **Compressor current (126): scale 0.1.** Although the model says `scale 0`, the
+  raw value is deci-amps — set the LocalTuya **Scaling factor to `0.1`** so it
+  reads amps (raw 50 → 5.0 A, raw 75 → 7.5 A). The value tracks frequency, which
+  confirms the factor. Note this is **compressor/inverter-side** current, not
+  mains — don't compute power from it (use a real power meter; see COP notes).
+- **EXV (128): 0–10000.** Apply `/100` if you want 0–100 %.
 
 ---
 
-## Fan control
+## Fault codes
 
-| DP | Name | Platform | Suggested entity_id | Values |
-|---|---|---|---|---|
-| 140 | AC Fan Speed | `select` | `select.pool_heat_pump_ac_fan_speed` | `LowSpeed` / `MidSpeed` / `HighSpeed` |
+Both fault DPs are **bitmaps** — each bit is one error code. The device model
+ships the bit labels (the codes shown on the unit's display); the *meaning* of
+each code still needs the unit's service manual / error sheet.
 
----
+**DP 115 `fault1`** (bit 0 → 29):
 
-## Fault system
-
-Fault DPs are **bitmaps** — each bit is a distinct fault. Map as plain sensors;
-decode bits in templates (see below) or just alarm on "non-zero".
-
-| DP | Name | Platform | Suggested entity_id | Notes |
-|---|---|---|---|---|
-| 115 | Fault Group 1 | `sensor` | `sensor.pool_heat_pump_fault_group_1` | Bitmap |
-| 116 | Fault Group 2 | `sensor` | `sensor.pool_heat_pump_fault_group_2` | Bitmap |
-
-A simple "any fault" template binary sensor:
-
-```yaml
-template:
-  - binary_sensor:
-      - name: Pool Heat Pump Fault
-        device_class: problem
-        state: >
-          {{ (states('sensor.pool_heat_pump_fault_group_1') | int(0)) > 0
-             or (states('sensor.pool_heat_pump_fault_group_2') | int(0)) > 0 }}
+```
+E1 E2 E3 E4 E5 E6 E7 E8 E9 EA EB ED
+P0 P1 P2 P3 P4 P5 P6 P7 P8 P9 PA
+F1 F2 F3 F4 F5 F6 F7
 ```
 
-> Individual bit meanings are OEM-specific. Cross-reference the unit's service
-> manual / error-code sheet to label specific bits. Until you have that, treat
-> any non-zero value as "fault present, check the unit display."
+**DP 116 `fault2`** (bit 0 → 3): `F8  F9  Fb  Fa`
 
----
-
-## Operating state
-
-| DP | Name | Platform | Suggested entity_id | Values | Notes |
-|---|---|---|---|---|---|
-| 118 | Actual Operating Mode | `sensor` | `sensor.pool_heat_pump_actual_mode` | `0` = Heating, `1` = Cooling | The **real** running mode — use for diagnostics/automations |
-| 103 | Celsius / Fahrenheit toggle | `switch` or `select` | `switch.pool_heat_pump_unit_toggle` | °C / °F | Leave on °C to keep scaling consistent |
-
-Human-readable actual mode:
+A value of `0` on both = no faults. To decode a non-zero value, read it as a
+bitmask: bit *n* set ⇒ the *n*-th code above is active. A template that lists
+active DP115 codes:
 
 ```yaml
 template:
   - sensor:
-      - name: Pool Heat Pump Actual Mode (text)
+      - name: Pool Heat Pump Active Faults
         state: >
-          {% set m = states('sensor.pool_heat_pump_actual_mode') %}
-          {{ 'Heating' if m == '0' else 'Cooling' if m == '1' else 'Unknown' }}
+          {% set codes = ['E1','E2','E3','E4','E5','E6','E7','E8','E9','EA','EB','ED',
+                          'P0','P1','P2','P3','P4','P5','P6','P7','P8','P9','PA',
+                          'F1','F2','F3','F4','F5','F6','F7'] %}
+          {% set v = states('sensor.pool_error_code1') | int(0) %}
+          {% set ns = namespace(active=[]) %}
+          {% for i in range(codes | length) %}
+            {% if v.__and__(2 ** i) %}{% set ns.active = ns.active + [codes[i]] %}{% endif %}
+          {% endfor %}
+          {{ ns.active | join(', ') if ns.active else 'OK' }}
 ```
+
+---
+
+## Heat output & COP — hardware limitation
+
+**This controller does not expose an outlet/return water temperature.** Its
+analog inputs are: AIN1 = inlet water (DP102), AIN3 = outdoor air coil (DP120),
+AIN5 = discharge gas (DP122), AIN7 = ambient air (DP124). AIN2/4/6 are not
+populated. So there is **no on-board way to measure water-side ΔT**, which is
+what heat output needs:
+
+> Q (kW) = flow (kg/s) × 4.186 × (T_outlet − T_inlet)
+
+Consequences:
+
+- `RadTemp` (DP127) is the **electronics heatsink**, not delivered heat — do not
+  use it for output.
+- `OutPipeTemp` (DP120) is the **air-side coil** (input side), not output.
+- To get real heat output / COP you must **add an outlet water sensor**
+  (e.g. a DS18B20 on the return pipe via ESPHome) **and a flow rate** (pump
+  spec/curve or a flow meter). Electrical input is already exact if you have a
+  power meter on the circuit.
+
+Until then, COP can only be a rough proxy (inlet vs ambient ΔT) — good for
+trends, not accounting.
+
+---
+
+## Recommended additional entities
+
+Currently unmapped but present in the model and worth adding in LocalTuya:
+
+| DP | Add as | Why |
+|---|---|---|
+| 118 `WarmOrCool` | `binary_sensor` (or sensor) | The **actual** heat/cool running state — best diagnostic signal |
+| 134 `CompRly` | `binary_sensor` | Confirms the compressor contactor is closed (running vs commanded) |
+| 107 `SetDnLimit` / 108 `SetUpLimit` | min/max of the `number` (106) | Bound the setpoint to the unit's real limits instead of guessing |
+| 103 `change_tem` | leave as `switch`, keep **off (°C)** | Locks temperature scaling |
 
 ---
 
@@ -129,13 +142,11 @@ template:
 When you click **Add a new device** in LocalTuya and then **add entities**, for
 each row above you'll be asked for:
 
-- **Entity type / platform** → the *Platform* column
+- **Entity type / platform** → switch / sensor / binary_sensor / number / select
 - **DP id** → the *DP* column
-- For `number`: min/max/step → use the *Range* column (clamp setpoint sensibly)
-- For `select`: the option list → the *values* column (use exact strings)
-- For `sensor`: optional scaling, unit, device_class → see notes
-
-Do all 25 entities in one pass so the dashboard works without edits.
+- For `number` (106): min/max/step → bound with DP107/DP108
+- For `select` (105, 140): the option list → use the exact enum strings
+- For `sensor`: scaling (current = `0.1`, temps = `1`), unit, device_class
 
 ---
 
@@ -144,7 +155,7 @@ Do all 25 entities in one pass so the dashboard works without edits.
 The bundled dashboard (`dashboard/pool_heat_pump_tile.yaml`) is wired to the
 actual entity ids from a working install, so it doubles as a concrete example.
 Naming there uses `pool_*` / `pool_heatpump_*` rather than the generic
-`pool_heat_pump_*` suggestions above — adjust to whatever your LocalTuya setup
+`pool_heat_pump_*` suggestions — adjust to whatever your LocalTuya setup
 produced.
 
 | DP | This install's entity_id | Friendly name |
@@ -159,7 +170,7 @@ produced.
 | 122 | `sensor.pool_exhaust_temperature` | Heatpump Discharge Temp |
 | 127 | `sensor.pool_radiator_temperature` | Heatpump Heat Sink Temp |
 | 125 | `sensor.pool_heatpump_compressor_frequency` | Heatpump Compressor Frequency |
-| 126 | `sensor.pool_heatpump_compressor_current` | Heatpump Compressor Current |
+| 126 | `sensor.pool_heatpump_compressor_current` | Heatpump Compressor Current (scale 0.1) |
 | 104 | `sensor.pool_compressor_speed` | Heatpump Speed Percentage |
 | 128 | `sensor.pool_heatpump_exv_position` | Heatpump EXV Position |
 | 129 | `sensor.pool_heatpump_dc_fan_speed` | Heatpump DC Fan Speed |
@@ -171,16 +182,12 @@ produced.
 | 115 | `sensor.pool_error_code1` | Heatpump Fault Group 1 |
 | 116 | `sensor.pool_error_code2` | Heatpump Fault Group 2 |
 
-**Not mapped in this install (DPs worth adding):**
+**Measured electrical input (not a Tuya DP):** this install has a **Shelly power
+meter** on the circuit (`sensor.pool_power_power` W, `sensor.pool_power_energy`
+kWh). A power-decomposition test (heat pump off vs running, lights off vs on)
+gave: **circulation pump ≈ 252 W**, **lights (MiLight) ≈ 26 W**, heat-pump
+standby ≈ 0 W. So live heat-pump electrical power:
 
-| DP | What | Why add it |
-|---|---|---|
-| 118 | Actual operating mode (0=Heating, 1=Cooling) | The real running state — best diagnostic signal (see Sensor Design Notes) |
-| 134 | Compressor relay | Confirms compressor energised vs just commanded |
-| 103 | °C / °F toggle | Keep on °C to lock scaling |
+> **P_heatpump = `sensor.pool_power_power` − 252 (pump) − 26 (only while lights on)**
 
-**Bonus — measured electrical input (not a Tuya DP):**
-This install has a **Shelly power meter** on the heat-pump circuit, exposing
-`sensor.pool_power_power` (W) and `sensor.pool_power_energy` (kWh). That turns the
-COP estimate from a current×voltage *proxy* into one based on **measured watts** —
-see the optional template block in the dashboard YAML.
+Measured running draw: ~724 W at 50 Hz/67 %, ~1246 W at 75 Hz/100 %.
